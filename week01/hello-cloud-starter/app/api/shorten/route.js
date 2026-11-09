@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { NextResponse } from "next/server";
-import { saveUrl } from "../../../lib/db";
+import { saveUrl, findUrlByShortCode } from "../../../lib/db";
 
 export const runtime = "nodejs";
 
@@ -158,14 +158,35 @@ export async function POST(request) {
 
 
     /*
+     * 과제: 자기 서비스 URL 단축 방지
+     */
+    if (parsedUrl.host === new URL(request.url).host) {
+      return NextResponse.json(
+        {
+          error: {
+            code: "SELF_URL",
+            message: "Cannot shorten this service's own URL.",
+          },
+        },
+        { status: 400 }
+      );
+    }
+
+
+    /*
      * 6. Short URL 생성
      *
      * 모든 검사를 통과했으므로
      * shortCode와 shortUrl을 생성합니다.
+     *
+     * 과제: 동일 URL 중복 처리
      */
     const shortCode = createShortCode(originalUrl);
 
-    await saveUrl(shortCode, originalUrl);
+    const existing = await findUrlByShortCode(shortCode);
+    if (!existing) {
+      await saveUrl(shortCode, originalUrl);
+    }
 
     const baseUrl = new URL(request.url).origin;
 
@@ -182,7 +203,7 @@ export async function POST(request) {
         shortUrl: `${baseUrl}/${shortCode}`,
         originalUrl,
       },
-      { status: 201 }
+      { status: existing ? 200 : 201 }
     );
 
   } catch {
